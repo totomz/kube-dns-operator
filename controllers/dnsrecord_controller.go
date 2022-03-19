@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"time"
 )
@@ -35,6 +36,8 @@ type DnsRecordReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
+
+const dnsRecordFinalizer = "dnsrecord.net.beekube.cloud/finalizer"
 
 // +kubebuilder:rbac:groups=net.beekube.cloud,resources=dnsrecords,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=net.beekube.cloud,resources=dnsrecords/status,verbs=get;update;patch
@@ -60,14 +63,59 @@ func (r *DnsRecordReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	var errApi error
 	r.LogEvent(ctx, "Normal", "InitReconciliation", "Upserting dns record", req, crd)
+
+	// Resource deletion
+	if crd.GetDeletionTimestamp() != nil {
+		logger.Info("Cleaning up records")
+		if controllerutil.ContainsFinalizer(crd, dnsRecordFinalizer) {
+			logger.Info("Found a finalizer")
+
+			if crd.Spec.Route53Records.Name != "" {
+				if err := r.FinalizeAwsRoute53(ctx, req.Namespace, crd.Spec.Route53Records); err != nil {
+					// Run finalization logic for memcachedFinalizer. If the
+					// finalization logic fails, don't remove the finalizer so
+					// that we can retry during the next reconciliation.
+					logger.Error(err, "can't cleanup - retry later")
+					r.LogEvent(ctx, "Warning", "ErrorDnsApiFinalize", err.Error(), req, crd)
+					return RequeueAfter(120 * time.Second)
+				}
+			}
+
+			// Remove the finalizer. Once all finalizers have been
+			// removed, the object will be deleted.
+			controllerutil.RemoveFinalizer(crd, dnsRecordFinalizer)
+			err := r.Update(ctx, crd)
+			if err != nil {
+				logger.Error(err, "can't remove finalizer - won't retry")
+				r.LogEvent(ctx, "Warning", "ErrorDnsApiFinalize", err.Error(), req, crd)
+			}
+		}
+
+		return DoNotRequeue()
+	}
+
+	// Resource Upsert
 	if crd.Spec.Route53Records.Name != "" {
-		errApi = r.ReconcileRoute53(ctx, req.Namespace, crd.Spec.Route53Records, crd.Status)
+		// It's an aws record!
+		// Resource creation
+		errApi = r.ReconcileRoute53(ctx, req.Namespace, crd.Spec.Route53Records)
 	}
 
 	if errApi != nil {
 		r.LogEvent(ctx, "Warning", "ErrorDnsApi", errApi.Error(), req, crd)
-	} else {
-		r.LogEvent(ctx, "Normal", "DnsApiUpdated", "DNS Record updated", req, crd)
+		return DoNotRequeue()
+	}
+
+	r.LogEvent(ctx, "Normal", "DnsApiUpdated", "DNS Record updated", req, crd)
+
+	if !controllerutil.ContainsFinalizer(crd, dnsRecordFinalizer) {
+		controllerutil.AddFinalizer(crd, dnsRecordFinalizer)
+		r.LogEvent(ctx, "Normal", "InternalApi", "Adding record finalizer - the dns will probably be updated again", req, crd)
+		errUpdate := r.Update(ctx, crd)
+		if errUpdate != nil {
+			logger.Error(errUpdate, "can't add finalizer - won't retry")
+			r.LogEvent(ctx, "Warning", "ErrorDnsApiFinalize", errUpdate.Error(), req, crd)
+		}
 	}
 
 	return DoNotRequeue()
