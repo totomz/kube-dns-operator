@@ -28,4 +28,12 @@ spec:
 ```
 
 ## Supported DNS
-* Aws Route53
+
+### AWS Route53
+Create a secret with an AIM user that have access to Route53
+```
+kubectl create secret generic my-ideas-aws-dns \
+  --from-literal=secret-access-key="<secret key>" \
+  --from-literal=access-key-id="<AKIAzzzzz>" \
+  --namespace="default"
+```

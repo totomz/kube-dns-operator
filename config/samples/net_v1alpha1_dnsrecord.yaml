@@ -1,0 +1,6 @@
+apiVersion: net.beekube.cloud/v1alpha1
+kind: DnsRecord
+metadata:
+  name: dnsrecord-sample
+spec:
+  # TODO(user): Add fields here
