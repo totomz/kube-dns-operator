@@ -42,6 +42,8 @@ const dnsRecordFinalizer = "dnsrecord.net.beekube.cloud/finalizer"
 // +kubebuilder:rbac:groups=net.beekube.cloud,resources=dnsrecords,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=net.beekube.cloud,resources=dnsrecords/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=net.beekube.cloud,resources=dnsrecords/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;create
 
 func (r *DnsRecordReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
