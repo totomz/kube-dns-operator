@@ -37,3 +37,7 @@ kubectl create secret generic my-ideas-aws-dns \
   --from-literal=access-key-id="<AKIAzzzzz>" \
   --namespace="default"
 ```
+
+# Development
+`operator-framework` does not support (yet) go v1.18. 
+The `Makefile` is updated to work with go 1.18, but you need to manually install Kustomize: `cd bin && curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash ` 
