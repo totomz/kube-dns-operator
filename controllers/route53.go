@@ -10,6 +10,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/totomz/kube-dns-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"strings"
+)
+
+var (
+	ActionUpsert = "UPSERT"
+	ActionDelete = "DELETE"
 )
 
 func (r *DnsRecordReconciler) getAwsCred(ctx context.Context, secretNs, secretName, accessKeyIdKey, accessSecretKeyKey string) (string, string, error) {
@@ -39,7 +45,7 @@ func (r *DnsRecordReconciler) ReconcileRoute53(ctx context.Context, ns string, r
 		return err
 	}
 
-	return UpsertRoute53(ctx, record, "UPSERT", accessId, accessSecret)
+	return UpsertRoute53(ctx, record, ActionUpsert, accessId, accessSecret)
 }
 
 func (r *DnsRecordReconciler) FinalizeAwsRoute53(ctx context.Context, ns string, record v1alpha1.Route53Record) error {
@@ -53,7 +59,7 @@ func (r *DnsRecordReconciler) FinalizeAwsRoute53(ctx context.Context, ns string,
 		return err
 	}
 
-	return UpsertRoute53(ctx, record, "DELETE", accessId, accessSecret)
+	return UpsertRoute53(ctx, record, ActionDelete, accessId, accessSecret)
 }
 
 func GetChangeStatus53(ctx context.Context, changeId, accessId, accessSecret string) (*route53.GetChangeOutput, error) {
@@ -70,7 +76,9 @@ func GetChangeStatus53(ctx context.Context, changeId, accessId, accessSecret str
 
 func UpsertRoute53(ctx context.Context, record v1alpha1.Route53Record, action, accessId, accessSecret string) error {
 	logger := log.FromContext(ctx)
-	cfg, errConfig := config.LoadDefaultConfig(ctx, config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessId, accessSecret, "")))
+	cfg, errConfig := config.LoadDefaultConfig(ctx,
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessId, accessSecret, "")),
+		config.WithRegion("eu-west-1"))
 	if errConfig != nil {
 		logger.Error(errConfig, "can't get aws configuration")
 		return errConfig
@@ -104,6 +112,11 @@ func UpsertRoute53(ctx context.Context, record v1alpha1.Route53Record, action, a
 	svc := route53.NewFromConfig(cfg)
 	output, errUpsert := svc.ChangeResourceRecordSets(ctx, params)
 	if errUpsert != nil {
+		if action == "DELETE" && strings.Contains(errUpsert.Error(), "StatusCode: 400") {
+			logger.Error(errUpsert, "Record not found? Considering the reconcilitaion completed")
+			return nil
+		}
+
 		logger.Error(errUpsert, "failed aws api call :(")
 		return errUpsert
 	}

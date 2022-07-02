@@ -23,7 +23,7 @@ func TestUpsertCNAMERoute53(t *testing.T) {
 		Comment: "INTEGTEST -- kube-dns-operator",
 	}
 
-	err := UpsertRoute53(ctx, record, "UPSERT", os.Getenv("AWS_ACCESS_KEY"), os.Getenv("AWS_ACCESS_SECRET"))
+	err := UpsertRoute53(ctx, record, ActionUpsert, os.Getenv("AWS_ACCESS_KEY"), os.Getenv("AWS_ACCESS_SECRET"))
 	if err != nil {
 		t.Error(err)
 	}
@@ -44,7 +44,7 @@ func TestUpsertARoute53(t *testing.T) {
 		Comment: "INTEGTEST -- kube-dns-operator",
 	}
 
-	err := UpsertRoute53(ctx, record, "UPSERT", os.Getenv("AWS_ACCESS_KEY"), os.Getenv("AWS_ACCESS_SECRET"))
+	err := UpsertRoute53(ctx, record, ActionUpsert, os.Getenv("AWS_ACCESS_KEY"), os.Getenv("AWS_ACCESS_SECRET"))
 	if err != nil {
 		t.Error(err)
 	}
